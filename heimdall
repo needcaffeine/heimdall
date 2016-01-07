@@ -1,18 +1,19 @@
 #!/bin/bash
 
+# This is a script that allows you to programmatically connect
+# to different AWS EC2 hosts via a Bastion host.
+# For more info and to report issues: https://github.com/needcaffeine/heimdall
+
 # Usage
-# heimdall.sh                -   Usage information
-# heimdall.sh list           -   List all available hosts
-# heimdall.sh grant|revoke   -   Grants/Revokes your IP access to the bastion security group.
-# heimdall.sh <host>         -   Logs you into host via the bastion and the default user.
-# heimdall.sh <user>@<host>  -   Logs you into host via the bastion and the specified user.
+# heimdall                -   Usage information
+# heimdall list           -   List all available hosts
+# heimdall grant|revoke   -   Grants/Revokes your IP access to the bastion security group.
+# heimdall bastion        -   Logs you into the bastion itself.
+# heimdall <host>         -   Logs you into host via the bastion and the default user.
+# heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user.
 
-# What should these be for your organization?
-BASTION_HOST_NAME=
-BASTION_DNS_NAME=
-BASTION_SECURITY_GROUP_ID=
-SSH_KEY_FILE=~/.ssh/id_rsa
-
+# Configuration options for your organization.
+source ./heimdall.conf
 
 ###############################################################################
 # Do not modify the script below this line unless you know what you're doing. #
@@ -26,12 +27,13 @@ numArgs=($#)
 if [[ $numArgs -eq 0 ]]
 then
     echo usage:
-    echo "heimdall.sh                -   Usage information"
-    echo "heimdall.sh list           -   List all available hosts"
-    echo "heimdall.sh grant|revoke   -   Grants/Revokes your IP access to the bastion security group."
-    echo "heimdall.sh <host>         -   Logs you into host via the bastion and the default user."
-    echo "heimdall.sh <user>@<host>  -   Logs you into host via the bastion and the specified user."
-    exit
+    echo "heimdall                -   Usage information"
+    echo "heimdall list           -   List all available hosts"
+    echo "heimdall grant|revoke   -   Grants/Revokes your IP access to the bastion security group."
+    echo "heimdall bastion        -   Logs you into the bastion itself."
+    echo "heimdall <host>         -   Logs you into host via the bastion and the default user."
+    echo "heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user."
+    return
 fi
 
 case ${args[0]} in
@@ -65,7 +67,7 @@ case ${args[0]} in
             if [[ -z "$BASTION_HOST_NAME" ]]
             then
                 echo "ERROR: Please set either BASTION_DNS_NAME or BASTION_HOST_NAME."
-                exit
+                return
             fi
 
             BASTION_DNS_NAME=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" | jq -r '.Reservations[].Instances[].PublicDnsName'`
@@ -91,7 +93,7 @@ case ${args[0]} in
                 host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" | jq -r '.Reservations[].Instances[].PrivateDnsName'`
 
                 # Do the magic.
-                ssh -i ${SSH_KEY_FILE} -A -t ec2-user@${BASTION_DNS_NAME} ssh -A -t ${user}@${host}
+                ssh -i ${SSH_KEY_FILE} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} ssh -A -t ${user}@${host}
                 ;;
             esac
         ;;

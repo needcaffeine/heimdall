@@ -41,11 +41,11 @@ case ${args[0]} in
         ip=`dig +short myip.opendns.com @resolver1.opendns.com`
         case ${args[0]} in
             revoke|lock )
-                echo "Revoking your IP access to the ingress group..."
+                echo "Revoking your IP (${ip}/32) access to the ingress group..."
                 aws ec2 revoke-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32
                 ;;
             grant|unlock )
-                echo "Granting your IP access to the ingress group..."
+                echo "Granting your IP (${ip}/32) access to the ingress group..."
                 aws ec2 authorize-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32
                 ;;
             esac

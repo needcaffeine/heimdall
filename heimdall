@@ -13,7 +13,8 @@
 # heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user.
 
 # Configuration options for your organization.
-source ./heimdall.conf
+heimdallDir="$(dirname "$(readlink -f "$0")")"
+source "${heimdallDir}/heimdall.conf"
 
 ###############################################################################
 # Do not modify the script below this line unless you know what you're doing. #
@@ -22,6 +23,9 @@ source ./heimdall.conf
 # Read in any positional arguments that were passed in.
 args=("$@")
 numArgs=($#)
+
+# Set the default awscli profile if not configured.
+AWSCLI_PROFILE="${AWSCLI_PROFILE:-default}"
 
 # If this script was invoked without any arguments, display usage information.
 if [[ $numArgs -eq 0 ]]
@@ -42,18 +46,18 @@ case ${args[0]} in
         case ${args[0]} in
             revoke|lock )
                 echo "Revoking your IP (${ip}/32) access to the ingress group..."
-                aws ec2 revoke-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32
+                aws ec2 revoke-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${AWSCLI_PROFILE}
                 ;;
             grant|unlock )
                 echo "Granting your IP (${ip}/32) access to the ingress group..."
-                aws ec2 authorize-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32
+                aws ec2 authorize-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${AWSCLI_PROFILE}
                 ;;
             esac
             ;;
 
     list )
         echo "Listing all running instances:"
-        aws ec2 describe-instances --filters "Name=instance-state-name,Values=running"\
+        aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --profile ${AWSCLI_PROFILE} \
             | jq -r '.Reservations[].Instances[]'\
             | jq -c '{Env: .Tags[] | select(.Key == "Env").Value, InstanceId: .InstanceId, Name: .Tags[] | select(.Key == "Name").Value}'\
             | jq -s '.|=sort_by(.Env,.Name)'\
@@ -70,7 +74,7 @@ case ${args[0]} in
                 return
             fi
 
-            BASTION_DNS_NAME=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" | jq -r '.Reservations[].Instances[].PublicDnsName'`
+            BASTION_DNS_NAME=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" --profile ${AWSCLI_PROFILE} | jq -r '.Reservations[].Instances[].PublicDnsName'`
         fi
 
         # If the target param contains a username, split it out so we can determine the host dns.
@@ -90,7 +94,7 @@ case ${args[0]} in
                 ;;
             * )
                 # Figure out the host dns.
-                host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" | jq -r '.Reservations[].Instances[].PrivateDnsName'`
+                host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" --profile ${AWSCLI_PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
 
                 # Do the magic.
                 ssh -i ${SSH_KEY_FILE} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} ssh -A -t ${user}@${host}

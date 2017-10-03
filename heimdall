@@ -13,7 +13,7 @@
 # heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user.
 
 # Configuration options for your organization.
-heimdallDir="$(dirname "$(readlink -f "$0")")"
+heimdallDir="$(dirname "$(readlink "$0")")"
 source "${heimdallDir}/heimdall.conf"
 
 ###############################################################################
@@ -37,7 +37,7 @@ then
     echo "heimdall bastion        -   Logs you into the bastion itself."
     echo "heimdall <host>         -   Logs you into host via the bastion and the default user."
     echo "heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user."
-    return
+    exit
 fi
 
 case ${args[0]} in

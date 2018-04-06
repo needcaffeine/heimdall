@@ -12,7 +12,7 @@ Installation instructions for these are on their respective pages, but on a Mac,
 When you're done with that, follow the instructions to [configure the aws cli](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html). **Important: Enter `json` for your output format.**
 
 ## Configuration
-You will need to modify the `heimdall.conf` file to add options specific to your organization.
+You will need to copy the `heimdall.sample.conf` file to `heimdall.conf`, then add options specific to your organization.
 
 ## Usage
 

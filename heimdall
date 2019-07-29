@@ -13,12 +13,29 @@
 # heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user.
 
 # Configuration options for your organization.
-heimdallDir="$(dirname "$(readlink -f "$0")")"
+heimdallDir="$(dirname "$(readlink "$0")")"
 source "${heimdallDir}/heimdall.conf"
 
 ###############################################################################
 # Do not modify the script below this line unless you know what you're doing. #
 ###############################################################################
+
+ed() {
+    { local line ; line=${@:1} ; }
+    if [[ $DEBUG -eq 1 ]]
+    then
+        LG='\033[0;34m'
+        NC='\033[0m' # No Color
+        echo -e "\033${LG}${line}\033${NC}" 1>&2
+    fi
+}
+
+ee() {
+    { local line ; line=${@:1} ; }
+    RED='\033[0;31m'
+    NC='\033[0m' # No Color
+    echo -e "\033${RED}${line}\033${NC}" 1>&2
+}
 
 # Read in any positional arguments that were passed in.
 args=("$@")
@@ -63,14 +80,13 @@ case ${args[0]} in
             | jq -s '.|=sort_by(.Env,.Name)'\
             | jq -c '.[]'
         ;;
-
     bastion|* )
         # Do we need to figure out the dns name for our Bastion host?
         if [[ -z "$BASTION_DNS_NAME" ]]
         then
             if [[ -z "$BASTION_HOST_NAME" ]]
             then
-                echo "ERROR: Please set either BASTION_DNS_NAME or BASTION_HOST_NAME."
+                ee "[ERROR] Please set either BASTION_DNS_NAME or BASTION_HOST_NAME."
                 return
             fi
 
@@ -79,6 +95,64 @@ case ${args[0]} in
 
         # If the target param contains a username, split it out so we can determine the host dns.
         host=${args[0]}
+        if [[ ${host} =~ "#" ]]
+        then
+            SEARCH_SERVICE=$(echo ${host} | cut -f1 -d\#)
+            SEARCH_CLUSTER=$(echo ${host} | cut -f2 -d\#)
+            EXECUTABLE=${args[1]:-'bash'}
+            echo "[INFO] Looking"
+
+            CLUSTER=`aws ecs list-clusters | jq -r ".clusterArns[] | select(. | contains (\"$SEARCH_CLUSTER\"))"`
+            if (( `echo $CLUSTER | wc -w` > 1 ))
+            then
+                ee "[ERROR] More than one matching cluster arn found"
+                ee "[ERROR] Got cluster arns:"
+                ee "$CLUSTER"
+                exit 127
+            fi
+            if (( `echo $CLUSTER | wc -w` == 0 ))
+            then
+                ee "[ERROR] No matching cluster arn found"
+                exit 127
+            fi
+            ed "[DEBUG] Got a cluster arn:\t$CLUSTER"
+            CLUSTER="--cluster $CLUSTER"
+
+            SERVICEARN=`aws ecs list-services $CLUSTER | jq -r ".serviceArns[] | select(. | contains(\"$SEARCH_SERVICE\"))"`
+            if (( `echo $SERVICEARN | wc -w` > 1 ))
+            then
+                ee "[ERROR] More than one matching service arn found"
+                ee "[ERROR] Got service arns:"
+                ee "$SERVICEARN"
+                exit 127
+            fi
+            if (( `echo $SERVICEARN | wc -w` == 0 ))
+            then
+                ee "[ERROR] No matching service arn found"
+                exit 127
+            fi
+            ed "[DEBUG] Got a service arn:\t$SERVICEARN"
+
+            TASK=`aws ecs list-tasks $CLUSTER --service $SERVICEARN | jq -r '.taskArns[0]'`
+            DESCRIBE_TASK=`aws ecs describe-tasks --task $TASK $CLUSTER`
+            ed "[DEBUG] Got a task:\t\t$TASK"
+
+            CONTAINER_INSTANCE=`echo $DESCRIBE_TASK | jq -r '.tasks[].containerInstanceArn'`
+            TASK_DEFINITION_ARN=`echo $DESCRIBE_TASK | jq -r '.tasks[].taskDefinitionArn' | cut -f2 -d/ | sed 's/:/-/'`
+            ed "[DEBUG] Got a container instance:\t$CONTAINER_INSTANCE"
+            ed "[DEBUG] Got an image name piece:\t$TASK_DEFINITION_ARN"
+
+            INSTANCE_ID=`aws ecs describe-container-instances $CLUSTER --container-instance $CONTAINER_INSTANCE| jq -r '.containerInstances[].ec2InstanceId'`
+            ed "[DEBUG] Got an instance id:\t$INSTANCE_ID"
+
+            HOST=`aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PrivateDnsName'`
+            ed "[DEBUG] Got a hostname:\t\t$HOST"
+            echo "[INFO] Connecting"
+
+            ed "[DEBUG] Using executable $EXECUTABLE"
+            ssh -i ${SSH_KEY_FILE} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} "ssh -A -t ec2-user@${HOST} \"docker exec -it --detach-keys 'ctrl-q,q' \\\$(docker ps --format='{{.Names}}' | grep $TASK_DEFINITION_ARN | awk '{print \$1}' | head -n 1) $EXECUTABLE\""
+            exit
+        fi
         if [[ ${host} =~ "@" ]]
         then
             user=$(echo ${host} | cut -f1 -d@)

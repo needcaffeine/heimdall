@@ -18,9 +18,10 @@ You will need to copy the `heimdall.sample.conf` file to `heimdall.conf`, then a
 
     $ ./heimdall
     usage:
-    heimdall                -   Usage information  
-    heimdall list           -   List all available hosts  
-    heimdall grant|revoke   -   Grants/Revokes your IP access to the bastion security group.  
-    heimdall bastion        -   Logs you into the bastion itself.
-    heimdall <host>         -   Logs you into host via the bastion and the default user.  
-    heimdall <user>@<host>  -   Logs you into host via the bastion and the specified user.
+    heimdall                     -   Usage information  
+    heimdall list                -   List all available hosts  
+    heimdall grant|revoke        -   Grants/Revokes your IP access to the bastion security group.  
+    heimdall bastion             -   Logs you into the bastion itself.
+    heimdall <host>              -   Logs you into host via the bastion and the default user.  
+    heimdall <user>@<host>       -   Logs you into host via the bastion and the specified user.
+    heimdall <service>#<cluster> -   Logs you into a specific service on the specified cluster. Uses bash by default. Supply your own command if you wish as another parameter.

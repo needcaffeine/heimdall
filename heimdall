@@ -61,7 +61,7 @@ fi
 
 case ${args[0]} in
     grant|revoke|lock|unlock )
-        ip=`dig +short myip.opendns.com @resolver1.opendns.com`
+        ip=`dig -4 +short myip.opendns.com @resolver1.opendns.com`
         case ${args[0]} in
             revoke|lock )
                 echo "Revoking your IP (${ip}/32) access to the ingress group..."

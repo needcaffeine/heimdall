@@ -110,7 +110,7 @@ case ${args[0]} in
 
             echo "[INFO] Looking"
 
-            CLUSTER=`aws ecs list-clusters | jq -r ".clusterArns[] | select(. | contains (\"$SEARCH_CLUSTER\"))"`
+            CLUSTER=`aws ecs list-clusters | jq -r ".clusterArns[] | select(. | match (\"$SEARCH_CLUSTER\$\"))"`
             if (( `echo $CLUSTER | wc -w` > 1 ))
             then
                 ee "[ERROR] More than one matching cluster arn found"

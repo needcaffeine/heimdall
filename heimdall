@@ -39,8 +39,42 @@ ee() {
 }
 
 # Read in any positional arguments that were passed in.
-args=("$@")
+args=()
 numArgs=($#)
+while [[ "$#" > 0 ]]; do
+    case "${1}" in
+        -x)
+            set -x
+            shift;;
+        --awscli-profile | \
+            --bastion-dns-name | \
+            --bastion-host-name | \
+            --bastion-host-port | \
+            --bastion-security-group-id | \
+            --bastion-user | \
+            --debug | \
+            --ssh-key-file)
+            if [[ -z ${2} || ${2} =~ \-\-.* ]]; then
+                # Ignore flags without values.
+                shift
+            else
+                # replace "--" with nothing
+                override=${1/--/}
+
+                # replace "-" with "_"
+                override=${override//-/_}
+
+                # convert to uppercase
+                override=$(echo ${override} | awk '{print toupper($0)}')
+
+                declare ${override}="${2}"
+                shift 2
+            fi
+            ;;
+        *) args+=("${1}"); shift;; # save argument for later
+    esac
+done
+set -- "${args[@]}" # restore saved arguments
 
 # Set the default awscli profile if not configured.
 AWSCLI_PROFILE="${AWSCLI_PROFILE:-default}"

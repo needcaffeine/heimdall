@@ -91,7 +91,7 @@ then
     echo "  bastion:                    Logs you into the bastion itself."
     echo
     echo ${bold}TARGETS${normal}
-    echo "  host:                       Logs you into host via the bastion and the default user."
+    echo "  host:                       Logs you into host via the bastion and the current user."
     echo "  user@host:                  Logs you into host via the bastion and the specified user."
     echo "  service#cluster:            Logs you into a specific service on the specified cluster."
     echo

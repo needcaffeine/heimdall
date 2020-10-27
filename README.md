@@ -17,11 +17,26 @@ You will need to copy the `heimdall.sample.conf` file to `heimdall.conf`, then a
 ## Usage
 
     $ ./heimdall
-    usage:
-    heimdall                     -   Usage information  
-    heimdall list                -   List all available hosts  
-    heimdall grant|revoke        -   Grants/Revokes your IP access to the bastion security group.  
-    heimdall bastion             -   Logs you into the bastion itself.
-    heimdall <host>              -   Logs you into host via the bastion and the default user.  
-    heimdall <user>@<host>       -   Logs you into host via the bastion and the specified user.
-    heimdall <service>#<cluster> -   Logs you into a specific service on the specified cluster.
+    Connect to different AWS EC2 hosts via a Bastion/Jump host.
+
+    USAGE
+      ./heimdall <command> <target> [flags]
+
+    CORE COMMANDS
+      list:                       List all available hosts.
+      grant:                      Grants access to your IP to the bastion security group.
+      revoke:                     Revokes access to your IP to the bastion security group.
+      bastion:                    Logs you into the bastion itself.
+
+    TARGETS
+      host:                       Logs you into host via the bastion and the current user.
+      user@host:                  Logs you into host via the bastion and the specified user.
+      service#cluster:            Logs you into a specific service on the specified cluster.
+
+    FLAGS
+      --awscli-profile <profile>  Switches your AWSCLI profile to a different one in your .aws/config file.
+
+    EXAMPLES
+      $ ./heimdall list
+      $ ./heimdall ec2-user@Prod1
+      $ ./heimdall backend#production

@@ -68,6 +68,23 @@ while [[ "$#" > 0 ]]; do
                 shift 2
             fi
             ;;
+        --profile)
+            if [[ ! -z ${PROFILES} ]]; then
+                for profile in $(echo ${PROFILES} | jq -r '. | keys | .[]'); do
+                    # Only override env variables if the provided profile is valid
+                    if [[ ${profile} != ${2} ]]; then
+                        continue
+                    fi
+
+                    AWSCLI_PROFILE=${profile}
+                    profile=$(echo ${PROFILES} | jq -r .\"${AWSCLI_PROFILE}\")
+                    while IFS='|' read key value; do
+                        eval ${key}="'${value}'"
+                    done <<< "$(jq -r 'to_entries | map(.key + "|" + (.value | tostring)) | .[]' <<<"${profile}")"
+                done
+                shift 2
+            fi
+            ;;
         *) args+=("${1}"); shift;; # save argument for later
     esac
 done
@@ -96,6 +113,8 @@ then
     echo "  service#cluster:            Logs you into a specific service on the specified cluster."
     echo
     echo ${bold}FLAGS${normal}
+    echo "  --profile <profile>         Use a preconfigured profile in the PROFILES configuration variable in heimdall.conf. If the profile isn't found, it's ignored."
+    echo "  ${bold}NOTE:${normal}                       Every configurable variable found in heimdall.conf can be passed as a flag. The format is to use lowercase, kebab-case names with a value. Example:"
     echo "  --awscli-profile <profile>  Switches your AWSCLI profile to a different one in your .aws/config file."
     echo
     echo ${bold}EXAMPLES${normal}

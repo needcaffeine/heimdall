@@ -42,8 +42,7 @@ while [[ "$#" > 0 ]]; do
         -x)
             set -x
             shift;;
-        --awscli-profile | \
-            --bastion-dns-name | \
+        --bastion-dns-name | \
             --bastion-host-name | \
             --bastion-host-port | \
             --bastion-security-group-id | \
@@ -67,13 +66,32 @@ while [[ "$#" > 0 ]]; do
                 shift 2
             fi
             ;;
+        --profile)
+            if [[ ! -z ${PROFILES} ]]; then
+                # Set the awscli profile
+                PROFILE=${2}
+
+                for profile_name in $(echo ${PROFILES} | jq -r '. | keys | .[]'); do
+                    # Only override env variables if the provided profile_name is configured
+                    if [[ ${profile_name} != ${2} ]]; then
+                        continue
+                    fi
+
+                    profile_defaults=$(echo ${PROFILES} | jq -r .\"${profile_name}\")
+                    while IFS='|' read key value; do
+                        eval ${key}="'${value}'"
+                    done <<< "$(jq -r 'to_entries | map(.key + "|" + (.value | tostring)) | .[]' <<<"${profile_defaults}")"
+                done
+                shift 2
+            fi
+            ;;
         *) args+=("${1}"); shift;; # save argument for later
     esac
 done
 set -- "${args[@]}" # restore saved arguments
 
 # Set the default awscli profile if not configured.
-AWSCLI_PROFILE="${AWSCLI_PROFILE:-default}"
+PROFILE="${PROFILE:-default}"
 
 # If this script was invoked without any arguments, display usage information.
 if [[ $numArgs -eq 0 ]]; then
@@ -94,7 +112,10 @@ if [[ $numArgs -eq 0 ]]; then
     echo "  service#cluster:            Logs you into a specific service on the specified cluster."
     echo
     echo ${bold}FLAGS${normal}
-    echo "  --awscli-profile <profile>  Switches your AWSCLI profile to a different one in your .aws/config file."
+    echo "  --profile <profile>         Switches your AWSCLI profile to a different one in your .aws/config file."
+    echo "  NOTE:                       Every configurable variable found in heimdall.conf can be passed as a flag."
+    echo "                              The format is to use lowercase, kebab-case names with a value."
+    echo "                              Example: --bastion-host-name would set/override the config variable BASTION_HOST_NAME."
     echo
     echo ${bold}EXAMPLES${normal}
     echo "  $ ./heimdall list"
@@ -109,18 +130,18 @@ case ${args[0]} in
         case ${args[0]} in
             revoke|lock)
                 echo "Revoking your IP (${ip}/32) access to the ingress group..."
-                aws ec2 revoke-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${AWSCLI_PROFILE}
+                aws ec2 revoke-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${PROFILE}
                 ;;
             grant|unlock)
                 echo "Granting your IP (${ip}/32) access to the ingress group..."
-                aws ec2 authorize-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${AWSCLI_PROFILE}
+                aws ec2 authorize-security-group-ingress --group-id ${BASTION_SECURITY_GROUP_ID} --protocol tcp --port 22 --cidr ${ip}/32 --profile ${PROFILE}
                 ;;
             esac
             ;;
 
     list )
         echo "Listing all running instances:"
-        aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --profile ${AWSCLI_PROFILE} \
+        aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --profile ${PROFILE} \
             | jq -r '.Reservations[].Instances[]'\
             | jq -c '{Env: .Tags[] | select(.Key == "Env").Value, InstanceId: .InstanceId, Name: .Tags[] | select(.Key == "Name").Value}'\
             | jq -s '.|=sort_by(.Env,.Name)'\
@@ -133,7 +154,7 @@ case ${args[0]} in
             return
         fi
 
-        BASTION_DNS_NAME=${BASTION_DNS_NAME:-$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" --profile ${AWSCLI_PROFILE} | jq -r '.Reservations[].Instances[].PublicDnsName')}
+        BASTION_DNS_NAME=${BASTION_DNS_NAME:-$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PublicDnsName')}
 
         # If the target param contains a username, split it out so we can determine the host dns.
         host=${args[0]}
@@ -149,7 +170,7 @@ case ${args[0]} in
 
             echo "[INFO] Looking"
 
-            CLUSTER=`aws ecs list-clusters --profile ${AWSCLI_PROFILE} | jq -r ".clusterArns[] | select(. | match (\"$SEARCH_CLUSTER\$\"))"`
+            CLUSTER=`aws ecs list-clusters --profile ${PROFILE} | jq -r ".clusterArns[] | select(. | match (\"$SEARCH_CLUSTER\$\"))"`
             if (( `echo $CLUSTER | wc -w` > 1 )); then
                 ee "[ERROR] More than one matching cluster arn found"
                 ee "[ERROR] Got cluster arns:"
@@ -163,7 +184,7 @@ case ${args[0]} in
             ed "[DEBUG] Got a cluster arn:\t$CLUSTER"
             CLUSTER="--cluster $CLUSTER"
 
-            SERVICEARN=`aws ecs list-services $CLUSTER --profile ${AWSCLI_PROFILE} | jq -r ".serviceArns[] | select(. | contains(\"$SEARCH_SERVICE\"))"`
+            SERVICEARN=`aws ecs list-services $CLUSTER --profile ${PROFILE} | jq -r ".serviceArns[] | select(. | contains(\"$SEARCH_SERVICE\"))"`
             if (( `echo $SERVICEARN | wc -w` > 1 )); then
                 ee "[ERROR] More than one matching service arn found"
                 ee "[ERROR] Got service arns:"
@@ -176,8 +197,8 @@ case ${args[0]} in
             fi
             ed "[DEBUG] Got a service arn:\t$SERVICEARN"
 
-            TASK=`aws ecs list-tasks $CLUSTER --service $SERVICEARN --profile ${AWSCLI_PROFILE} | jq -r '.taskArns[0]'`
-            DESCRIBE_TASK=`aws ecs describe-tasks --task $TASK $CLUSTER --profile ${AWSCLI_PROFILE}`
+            TASK=`aws ecs list-tasks $CLUSTER --service $SERVICEARN --profile ${PROFILE} | jq -r '.taskArns[0]'`
+            DESCRIBE_TASK=`aws ecs describe-tasks --task $TASK $CLUSTER --profile ${PROFILE}`
             ed "[DEBUG] Got a task:\t\t$TASK"
 
             CONTAINER_INSTANCE=`echo $DESCRIBE_TASK | jq -r '.tasks[].containerInstanceArn'`
@@ -185,10 +206,10 @@ case ${args[0]} in
             ed "[DEBUG] Got a container instance:\t$CONTAINER_INSTANCE"
             ed "[DEBUG] Got an image name piece:\t$TASK_DEFINITION_ARN"
 
-            INSTANCE_ID=`aws ecs describe-container-instances $CLUSTER --container-instance $CONTAINER_INSTANCE --profile ${AWSCLI_PROFILE} | jq -r '.containerInstances[].ec2InstanceId'`
+            INSTANCE_ID=`aws ecs describe-container-instances $CLUSTER --container-instance $CONTAINER_INSTANCE --profile ${PROFILE} | jq -r '.containerInstances[].ec2InstanceId'`
             ed "[DEBUG] Got an instance id:\t$INSTANCE_ID"
 
-            HOST=`aws ec2 describe-instances --instance-ids $INSTANCE_ID --profile ${AWSCLI_PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
+            HOST=`aws ec2 describe-instances --instance-ids $INSTANCE_ID --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
             ed "[DEBUG] Got a hostname:\t\t$HOST"
             echo "[INFO] Connecting"
 
@@ -210,7 +231,7 @@ case ${args[0]} in
                 ;;
             *)
                 # Figure out the host dns.
-                host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" --profile ${AWSCLI_PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
+                host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
 
                 # Do the magic.
                 ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} ssh -A -t ${user}@${host}

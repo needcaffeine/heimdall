@@ -151,7 +151,7 @@ case ${args[0]} in
         # Do we need to figure out the dns name for our Bastion host?
         if [[ -z "$BASTION_DNS_NAME" && -z "$BASTION_HOST_NAME" ]]; then
             ee "[ERROR] Please set either BASTION_DNS_NAME or BASTION_HOST_NAME."
-            return
+            exit 127
         fi
 
         BASTION_DNS_NAME=${BASTION_DNS_NAME:-$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${BASTION_HOST_NAME}" --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PublicDnsName')}
@@ -230,11 +230,16 @@ case ${args[0]} in
                 ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ec2-user@${BASTION_DNS_NAME}
                 ;;
             *)
-                # Figure out the host dns.
-                host=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PrivateDnsName'`
+                # Figure out the host ip.
+                PRIVATE_IP=`aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${host}" --profile ${PROFILE} | jq -r '.Reservations[].Instances[].PrivateIpAddress'`
+
+                if [[ -z ${PRIVATE_IP} ]]; then
+                    ee "${host} is not a valid instance tag."
+                    exit 127
+                fi
 
                 # Do the magic.
-                ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} ssh -A -t ${user}@${host}
+                ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ${BASTION_USER}@${BASTION_DNS_NAME} ssh -A -t ${user}@${PRIVATE_IP}
                 ;;
             esac
         ;;

@@ -227,7 +227,7 @@ case ${args[0]} in
 
         case ${args[0]} in
             bastion)
-                ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ec2-user@${BASTION_DNS_NAME}
+                ssh -i ${SSH_KEY_FILE} -p ${BASTION_HOST_PORT:-22} -A -t ${BASTION_USER}@${BASTION_DNS_NAME}
                 ;;
             *)
                 # Figure out the host ip.
